@@ -1,93 +1,95 @@
-FROM ubuntu:latest
+FROM       ubuntu:latest
+MAINTAINER Jesse Braham <jesse@beta7.io>
 
 
+## Update apt's package cache and install all build dependencies. Clean up the
+## package cache when we're finished.
+##
 ## Setting DEBIAN_FRONTEND to noninteractive ensures that apt-get will never
 ## try to interact with us.
 ## https://manpages.ubuntu.com/manpages/xenial/man7/debconf.7.html
 ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update && apt-get upgrade -y
-RUN apt-get install -y clang curl llvm make pkg-config zlib1g
+RUN apt-get update && apt-get install -y \
+    clang \
+    cmake \
+    curl \
+    git \
+    libssl-dev \
+    llvm make \
+    pkg-config \
+    wget \
+    zlib1g \
+ && rm -rf /var/lib/apt/lists/*
 
 
-## Install all ESP-IDF dependencies.
-## https://docs.espressif.com/projects/esp-idf/en/latest/get-started/linux-setup.html
-RUN apt-get install -y git wget flex bison gperf python python-pip python-setuptools \
-                       cmake ninja-build ccache libffi-dev libssl-dev
-
-
-## Build LLVM for the xtensa target.
-## https://github.com/MabezDev/xtensa-rust-quickstart#llvm-xtensa
-ENV BUILD_ROOT $HOME/.xtensa
-ENV LLVM_ROOT  ${BUILD_ROOT}/llvm-project/llvm
-ENV LLVM_BUILD ${LLVM_ROOT}/build
-
-RUN mkdir -p "${BUILD_ROOT}"
-WORKDIR ${BUILD_ROOT}
-RUN git clone https://github.com/MabezDev/llvm-project
-
-ENV CC  clang
-ENV CXX clang++
-
-RUN mkdir -p "${LLVM_BUILD}"
-WORKDIR ${LLVM_BUILD}
-RUN cmake .. -DLLVM_TARGETS_TO_BUILD="X86" -DLLVM_EXPERIMENTAL_TARGETS_TO_BUILD="Xtensa" -DCMAKE_BUILD_TYPE=Release -G "Ninja"
-RUN cmake --build .
-
-
-## Install the most recent version of Rust nightly using rustup.
+## Install the most recent version of the nightly Rust toolchain using rustup.
+## Use the minimal profile to help keep the image size down.
 ## https://rustup.rs/
-WORKDIR /
-RUN curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh && \
-	chmod +x ./rustup.sh && \
-	./rustup.sh  --default-toolchain nightly --profile default -y && \ 
-	rm rustup.sh
+ENV HOME /root
+
+WORKDIR ${HOME}
+RUN curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh \
+ && chmod +x rustup.sh \
+ && ./rustup.sh --default-toolchain nightly --profile minimal -y \ 
+ && rm rustup.sh
 
 
-## Configure the Rust build to use our custom-built version of LLVM in order
-## to support the xtensa target. Build and install the Rust compiler.
+## Check out the Xtensa fork of Rust. Build and install LLVM and Rust with
+## support for the Xtensa target. Remove any documentation, build artifacts, or
+## files/directories which are otherwise not required.
 ## https://github.com/MabezDev/xtensa-rust-quickstart#rust-xtensa
+ENV BUILD_ROOT  ${HOME}/.xtensa
 ENV RUST_XTENSA ${BUILD_ROOT}/rust-xtensa
 ENV RUST_BUILD  ${RUST_XTENSA}/build
 
 WORKDIR ${BUILD_ROOT}
-RUN git clone https://github.com/MabezDev/rust-xtensa.git
+RUN git clone https://github.com/MabezDev/rust-xtensa.git \
+ && cd "${RUST_XTENSA}" \
+ && git checkout 25ae59a82487b8249b05a78f00a3cc35d9ac9959 \
+ && mkdir -p "${RUST_BUILD}" \
+ && ./configure --experimental-targets="Xtensa" --prefix="${RUST_BUILD}" \
+ && python x.py build \
+ && python x.py install \
+ && $HOME/.cargo/bin/rustup toolchain link xtensa "${RUST_BUILD}" \
+ && find . -maxdepth 1 -not -name "." \
+                       -not -name ".." \
+                       -not -name "build" \
+                       -not -name "src" \
+                       -not -name "Cargo.lock" \
+                       -exec rm -rv {} + \
+ && cd "${RUST_BUILD}" \
+ && rm -rf bootstrap cache tmp \
+ && cd "${RUST_BUILD}/x86_64-unknown-linux-gnu" \
+ && rm -rf compiler-doc crate-docs doc md-doc stage0* stage1*
 
-WORKDIR ${RUST_XTENSA}
-RUN mkdir -p "${RUST_BUILD}"
-RUN ./configure --llvm-root="${LLVM_BUILD}" --prefix="${RUST_BUILD}"
 
-RUN python x.py build
-RUN python x.py install
-RUN $HOME/.cargo/bin/rustup toolchain link xtensa ${RUST_BUILD}
-
-
-## Setup the xtensa-esp32-elf & xtensa-lx106-elf toolchains.
+## Set up the xtensa-esp32-elf & xtensa-lx106-elf toolchains. Set the PATH
+## environment variable to include all relevant executable directories.
 ## https://github.com/MabezDev/xtensa-rust-quickstart#xtensa-esp32-elf-toolchain
-ENV ESP32_TOOLS   /xtensa-esp32-elf
-ENV ESP8266_TOOLS /xtensa-lx106-elf
+ENV ESP32_TOOLS   ${BUILD_ROOT}/xtensa-esp32-elf
+ENV ESP8266_TOOLS ${BUILD_ROOT}/xtensa-lx106-elf
 
-WORKDIR /
+WORKDIR ${BUILD_ROOT}
+RUN wget https://dl.espressif.com/dl/xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz \
+ && tar xzf xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz \
+ && rm xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz \
+ && wget https://dl.espressif.com/dl/xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz \
+ && tar xzf xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz \
+ && rm xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz
 
-RUN wget https://dl.espressif.com/dl/xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz && \
-	tar xzf xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz && \
-	rm xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz
-	
-RUN wget https://dl.espressif.com/dl/xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz && \
-    tar xzf xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz && \
-    rm xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz
-
-ENV HOME /root
-ENV PATH ${ESP32_TOOLS}/bin:/usr/local/bin:${ESP8266_TOOLS}/bin:${HOME}/.cargo/bin:$PATH
+ENV PATH ${ESP32_TOOLS}/bin:${ESP8266_TOOLS}/bin:${HOME}/.cargo/bin:$PATH
 
 
-## Setup Xargo to allow for cross-compilation.
+## Set up Xargo to allow for cross-compilation.
 ## https://github.com/japaric/xargo
 ## https://github.com/MabezDev/xtensa-rust-quickstart#xargo-or-cargo-xbuild
 RUN cargo install xargo
+
 ENV XARGO_RUST_SRC ${RUST_XTENSA}/src
 ENV RUSTC          ${RUST_BUILD}/bin/rustc
 
 
-## By default, build the project located in /project.
+## By default, build the project located in /project. Additional parameters
+## can be passed to `xargo build` during the invocation of this image.
 WORKDIR /project
-CMD [ "xargo", "build", "--release" ]
+CMD ["xargo", "build", "--release"]
