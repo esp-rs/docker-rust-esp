@@ -5,7 +5,7 @@ MAINTAINER Jesse Braham <jesse@beta7.io>
 ## Update apt's package cache and install all build dependencies. Clean up the
 ## package cache when we're finished.
 ##
-## Setting DEBIAN_FRONTEND to noninteractive ensures that apt-get will never
+## Setting DEBIAN_FRONTEND to noninteractive ensures that `apt-get` will never
 ## try to interact with us.
 ## https://manpages.ubuntu.com/manpages/xenial/man7/debconf.7.html
 ARG DEBIAN_FRONTEND=noninteractive
@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y \
 
 
 ## Install the most recent version of the nightly Rust toolchain using rustup.
-## Use the minimal profile to help keep the image size down.
+## Use the minimal profile to keep the image size down as much as possible.
 ## https://rustup.rs/
 ENV HOME /root
 
@@ -35,9 +35,12 @@ RUN curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh \
 
 
 ## Check out the Xtensa fork of Rust. Build and install LLVM and Rust with
-## support for the Xtensa target. Remove any documentation, build artifacts, or
-## files/directories which are otherwise not required.
+## support for the Xtensa target.
 ## https://github.com/MabezDev/xtensa-rust-quickstart#rust-xtensa
+##
+## When done, remove any documentation, build artifacts, or files/directories
+## which are otherwise not required; this drastically reduces the size of the
+## resulting image.
 ENV BUILD_ROOT  ${HOME}/.xtensa
 ENV RUST_XTENSA ${BUILD_ROOT}/rust-xtensa
 ENV RUST_BUILD  ${RUST_XTENSA}/build
@@ -45,7 +48,7 @@ ENV RUST_BUILD  ${RUST_XTENSA}/build
 WORKDIR ${BUILD_ROOT}
 RUN git clone https://github.com/MabezDev/rust-xtensa.git \
  && cd "${RUST_XTENSA}" \
- && git checkout 25ae59a82487b8249b05a78f00a3cc35d9ac9959 \
+ && git checkout fc20a1b835a1db5098cf4ac8dc54f2c59ac36d12 \
  && mkdir -p "${RUST_BUILD}" \
  && ./configure --experimental-targets="Xtensa" --prefix="${RUST_BUILD}" \
  && python x.py build \
@@ -70,9 +73,9 @@ ENV ESP32_TOOLS   ${BUILD_ROOT}/xtensa-esp32-elf
 ENV ESP8266_TOOLS ${BUILD_ROOT}/xtensa-lx106-elf
 
 WORKDIR ${BUILD_ROOT}
-RUN wget https://dl.espressif.com/dl/xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz \
- && tar xzf xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz \
- && rm xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz \
+RUN wget https://dl.espressif.com/dl/xtensa-esp32-elf-gcc8_2_0-esp-2020r2-linux-amd64.tar.gz \
+ && tar xzf xtensa-esp32-elf-gcc8_2_0-esp-2020r2-linux-amd64.tar.gz \
+ && rm xtensa-esp32-elf-gcc8_2_0-esp-2020r2-linux-amd64.tar.gz \
  && wget https://dl.espressif.com/dl/xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz \
  && tar xzf xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz \
  && rm xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz
@@ -85,8 +88,8 @@ ENV PATH ${ESP32_TOOLS}/bin:${ESP8266_TOOLS}/bin:${HOME}/.cargo/bin:$PATH
 ## https://github.com/MabezDev/xtensa-rust-quickstart#xargo-or-cargo-xbuild
 RUN cargo install xargo
 
-ENV XARGO_RUST_SRC ${RUST_XTENSA}/src
 ENV RUSTC          ${RUST_BUILD}/bin/rustc
+ENV XARGO_RUST_SRC ${RUST_XTENSA}/src
 
 
 ## By default, build the project located in /project. Additional parameters
