@@ -1,4 +1,4 @@
-FROM       ubuntu:latest
+FROM       ubuntu:20.04
 MAINTAINER Jesse Braham <jesse@beta7.io>
 
 
@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     llvm make \
     pkg-config \
+    python3-minimal \
     wget \
     zlib1g \
  && rm -rf /var/lib/apt/lists/*
@@ -30,7 +31,7 @@ ENV HOME /root
 WORKDIR ${HOME}
 RUN curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh \
  && chmod +x rustup.sh \
- && ./rustup.sh --default-toolchain nightly --profile minimal -y \ 
+ && ./rustup.sh --default-toolchain nightly --profile minimal -y \
  && rm rustup.sh
 
 
@@ -48,11 +49,11 @@ ENV RUST_BUILD  ${RUST_XTENSA}/build
 WORKDIR ${BUILD_ROOT}
 RUN git clone https://github.com/MabezDev/rust-xtensa.git \
  && cd "${RUST_XTENSA}" \
- && git checkout fc20a1b835a1db5098cf4ac8dc54f2c59ac36d12 \
+ && git checkout 83ae8c3ba9864eb42de6346f10a18bf2339945d3 \
  && mkdir -p "${RUST_BUILD}" \
  && ./configure --experimental-targets="Xtensa" --prefix="${RUST_BUILD}" \
- && python x.py build \
- && python x.py install \
+ && python3 x.py build \
+ && python3 x.py install \
  && $HOME/.cargo/bin/rustup toolchain link xtensa "${RUST_BUILD}" \
  && find . -maxdepth 1 -not -name "." \
                        -not -name ".." \
