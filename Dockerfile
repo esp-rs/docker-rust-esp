@@ -1,4 +1,4 @@
-FROM       ubuntu:20.04
+FROM       ubuntu:bionic
 MAINTAINER Jesse Braham <jesse@beta7.io>
 
 
@@ -15,11 +15,10 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     libssl-dev \
-    llvm make \
+    ninja-build \
     pkg-config \
     python3-minimal \
     wget \
-    zlib1g \
  && rm -rf /var/lib/apt/lists/*
 
 
@@ -27,7 +26,6 @@ RUN apt-get update && apt-get install -y \
 ## Use the minimal profile to keep the image size down as much as possible.
 ## https://rustup.rs/
 ENV HOME /root
-
 WORKDIR ${HOME}
 RUN curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh \
  && chmod +x rustup.sh \
@@ -42,19 +40,21 @@ RUN curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs > rustup.sh \
 ## When done, remove any documentation, build artifacts, or files/directories
 ## which are otherwise not required; this drastically reduces the size of the
 ## resulting image.
-ENV BUILD_ROOT  ${HOME}/.xtensa
-ENV RUST_XTENSA ${BUILD_ROOT}/rust-xtensa
-ENV RUST_BUILD  ${RUST_XTENSA}/build
-
+ENV BUILD_ROOT     ${HOME}/.xtensa
+ENV RUST_ESP       ${BUILD_ROOT}/rust
+ENV RUST_BUILD     ${RUST_ESP}/build
+ENV RUST_TOOLCHAIN ${RUST_BUILD}/x86_64-unknown-linux-gnu/stage2
 WORKDIR ${BUILD_ROOT}
-RUN git clone https://github.com/MabezDev/rust-xtensa.git \
- && cd "${RUST_XTENSA}" \
- && git checkout 83ae8c3ba9864eb42de6346f10a18bf2339945d3 \
+RUN git clone -b esp https://github.com/esp-rs/rust.git \
+ && cd "${RUST_ESP}" \
  && mkdir -p "${RUST_BUILD}" \
- && ./configure --experimental-targets="Xtensa" --prefix="${RUST_BUILD}" \
- && python3 x.py build \
+ && ./configure --enable-extended \
+                --experimental-targets="Xtensa" \
+                --prefix="${RUST_BUILD}"  \
+                --tools=rustfmt \
+ && python3 x.py build --stage=2 \
  && python3 x.py install \
- && $HOME/.cargo/bin/rustup toolchain link xtensa "${RUST_BUILD}" \
+ && $HOME/.cargo/bin/rustup toolchain link esp "${RUST_TOOLCHAIN}" \
  && find . -maxdepth 1 -not -name "." \
                        -not -name ".." \
                        -not -name "build" \
@@ -72,7 +72,6 @@ RUN git clone https://github.com/MabezDev/rust-xtensa.git \
 ## https://github.com/MabezDev/xtensa-rust-quickstart#xtensa-esp32-elf-toolchain
 ENV ESP32_TOOLS   ${BUILD_ROOT}/xtensa-esp32-elf
 ENV ESP8266_TOOLS ${BUILD_ROOT}/xtensa-lx106-elf
-
 WORKDIR ${BUILD_ROOT}
 RUN wget https://dl.espressif.com/dl/xtensa-esp32-elf-gcc8_2_0-esp-2020r2-linux-amd64.tar.gz \
  && tar xzf xtensa-esp32-elf-gcc8_2_0-esp-2020r2-linux-amd64.tar.gz \
@@ -80,7 +79,6 @@ RUN wget https://dl.espressif.com/dl/xtensa-esp32-elf-gcc8_2_0-esp-2020r2-linux-
  && wget https://dl.espressif.com/dl/xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz \
  && tar xzf xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz \
  && rm xtensa-lx106-elf-linux64-1.22.0-100-ge567ec7-5.2.0.tar.gz
-
 ENV PATH ${ESP32_TOOLS}/bin:${ESP8266_TOOLS}/bin:${HOME}/.cargo/bin:$PATH
 
 
@@ -88,9 +86,8 @@ ENV PATH ${ESP32_TOOLS}/bin:${ESP8266_TOOLS}/bin:${HOME}/.cargo/bin:$PATH
 ## https://github.com/japaric/xargo
 ## https://github.com/MabezDev/xtensa-rust-quickstart#xargo-or-cargo-xbuild
 RUN cargo install xargo
-
 ENV RUSTC          ${RUST_BUILD}/bin/rustc
-ENV XARGO_RUST_SRC ${RUST_XTENSA}/src
+ENV XARGO_RUST_SRC ${RUST_ESP}/src
 
 
 ## By default, build the project located in /project. Additional parameters

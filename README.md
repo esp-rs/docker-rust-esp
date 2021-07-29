@@ -3,7 +3,7 @@
 Provides a `Dockerfile` defining a Rust build environment for the ESP32 and ESP8266. Builds LLVM and Rust with support for the Xtensa ISA.
 
 For more information on the Xtensa Rust toolchain, refer to the following repositories:  
-https://github.com/MabezDev/rust-xtensa  
+https://github.com/esp-rs/rust  
 https://github.com/MabezDev/xtensa-rust-quickstart
 
 ## Building
