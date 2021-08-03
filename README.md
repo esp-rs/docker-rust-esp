@@ -13,7 +13,7 @@ Ensure that [Docker](https://www.docker.com/) is installed on your system. At le
 To build the image (tagging it with the name `rust-esp`):
 
 ```bash
-$ git clone https://github.com/jessebraham/docker-rust-esp.git
+$ git clone https://github.com/esp-rs/docker-rust-esp.git
 $ cd docker-rust-esp/
 $ docker build -t rust-esp .
 ```
